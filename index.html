@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每日电影</title>
+    <!-- 引入Video.js库以支持更多视频格式 -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <style>
+        /* 公告弹窗样式 */
+        .announcement-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .announcement-modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .modal-content {
+            background-color: #fff;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+        
+        .announcement-modal.active .modal-content {
+            transform: translateY(0);
+        }
+        
+        .modal-header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .modal-close:hover {
+            color: #ff4d4d;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .modal-footer {
+            padding: 15px 20px;
+            background-color: #f5f5f5;
+            text-align: right;
+        }
+        
+        .modal-confirm {
+            padding: 8px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .modal-confirm:hover {
+            background-color: #2980b9;
+        }
+    
+        /* 重置浏览器默认样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        /* 设置body和html为全屏 */
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+        }
+        
+        /* 视频容器 */
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+        }
+        
+        /* 视频元素样式 */
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: #000;
+        }
+        
+        /* Video.js 样式调整 */
+        .vjs-fluid {
+            padding-top: 0 !important;
+        }
+        
+        .video-js {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        /* 错误提示样式 */
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 18px;
+            text-align: center;
+            padding: 20px;
+            background-color: rgba(255, 0, 0, 0.7);
+            border-radius: 5px;
+            display: none;
+        }
+        
+        /* 加载提示样式 */
+        .loading-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 18px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <div class="loading-message">正在加载电影...</div>
+        <video id="videoPlayer" class="video-js vjs-default-skin vjs-big-play-centered" controls autoplay loop></video>
+        <div id="errorMessage" class="error-message">
+            <p>未找到可播放的电影文件</p>
+            <p>请在video文件夹中添加.mp4格式的电影文件</p>
+        </div>
+    </div>
+    
+    <!-- 公告弹窗HTML结构 -->
+    <div id="announcementModal" class="announcement-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>系统公告</span>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button class="modal-confirm" id="modalConfirm">我知道了</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 获取视频元素和消息元素
+        const videoPlayer = videojs('videoPlayer', {
+            fluid: true,
+            playbackRates: [0.5, 1, 1.5, 2],
+            nativeControlsForTouch: false
+        });
+        const errorMessage = document.getElementById('errorMessage');
+        const loadingMessage = document.querySelector('.loading-message');
+
+        // 禁止视频播放器右键菜单
+        videoPlayer.on('contextmenu', (e) => e.preventDefault());
+        
+        // 要查找的视频目录
+        const videoDirectory = 'video/';
+        
+        // 存储最后播放的视频和时间位置
+        const STORAGE_KEY = 'videoPlayerState';
+        
+        let lastAnnouncementContent = '';
+
+        // 加载并显示公告弹窗
+        async function loadAnnouncement() {
+            const modal = document.getElementById('announcementModal');
+            const modalBody = document.getElementById('modalBody');
+            const modalClose = document.getElementById('modalClose');
+            const modalConfirm = document.getElementById('modalConfirm');
+
+            // 定期检查公告更新的函数
+            async function checkAnnouncementUpdate() {
+                try {
+                    // 添加时间戳参数防止缓存
+                    const response = await fetch(`gonggao.txt?_=${Date.now()}`);
+                    if (!response.ok) throw new Error('无法加载公告文件');
+                    const content = await response.text();
+
+                    // 比较内容是否有变化
+                    if (content !== lastAnnouncementContent) {
+                        lastAnnouncementContent = content;
+                        modalBody.textContent = content || '暂无公告内容';
+                        // 如果弹窗已关闭，更新内容后自动显示
+                        if (!modal.classList.contains('active')) {
+                            modal.classList.add('active');
+                        }
+                    }
+                } catch (error) {
+                    console.error('公告更新检查失败:', error);
+                }
+            }
+
+            try {
+                // 首次加载公告内容
+                // 添加时间戳参数防止缓存
+                const response = await fetch(`gonggao.txt?_=${Date.now()}`);
+                if (!response.ok) throw new Error('无法加载公告文件');
+                const content = await response.text();
+                lastAnnouncementContent = content;
+                modalBody.textContent = content || '暂无公告内容';
+            } catch (error) {
+                console.error('公告加载失败:', error);
+                modalBody.textContent = '公告加载失败，请稍后重试';
+            }
+
+            // 显示弹窗
+            modal.classList.add('active');
+
+            // 关闭弹窗事件
+            function closeModal() {
+                modal.classList.remove('active');
+            }
+
+            modalClose.addEventListener('click', closeModal);
+            modalConfirm.addEventListener('click', closeModal);
+
+            // 设置定时检查，每30秒检查一次更新
+            setInterval(checkAnnouncementUpdate, 30000);
+        }
+
+        // 页面加载完成后显示公告
+        window.addEventListener('load', loadAnnouncement);
+
+        // 尝试播放视频
+        async function loadAndPlayVideo() {
+            
+            try {
+                // 获取mp4文件夹中的文件列表
+                // 注意：在浏览器环境中，由于安全限制，我们无法直接读取本地文件系统
+                // 这里我们假设有预设的视频文件
+                
+                // 检查本地存储中是否有保存的视频状态
+                const savedState = localStorage.getItem(STORAGE_KEY);
+                let videoSrc = '';
+                
+                // 如果有保存的状态，先验证是否有效
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    videoSrc = state.videoSrc;
+                } else {
+                    // 默认优先使用sample.mp4
+                    videoSrc = videoDirectory + 'sample.mp4';
+                }
+                
+                // 加载视频源
+                async function loadVideoFromSrc(src, fileName) {
+                    // 确定文件类型
+                    let videoType = 'video/mp4';
+                    const videoExtension = '.' + fileName.split('.').pop().toLowerCase();
+                    
+                    videoPlayer.src({
+                        type: videoType,
+                        src: src
+                    });
+                    
+                    try {
+                        // 使用Promise包装视频加载过程
+                        return new Promise((resolve) => {
+                            // 设置超时，5秒后如果还没加载成功则视为失败
+                            const timeout = setTimeout(() => {
+                                console.error('视频加载超时');
+                                resolve(false);
+                            }, 5000);
+                               
+                            // 监听加载成功事件
+                            videoPlayer.on('loadeddata', () => {
+                                clearTimeout(timeout);
+                                loadingMessage.style.display = 'none';
+                                errorMessage.style.display = 'none';
+                                resolve(true);
+                            });
+                               
+                            // 监听错误事件
+                            videoPlayer.on('error', (event) => {
+                                clearTimeout(timeout);
+                                console.error('视频加载错误:', videoPlayer.error);
+                                resolve(false);
+                            });
+                               
+                            // 开始加载
+                            videoPlayer.load();
+                        });
+                    } catch (error) {
+                        console.error('加载失败:', error);
+                        return false;
+                    }
+                }
+                
+                // 尝试加载默认视频，如果失败则显示错误信息
+                // 由于浏览器安全限制，可能无法直接访问本地文件
+                try {
+                    await loadVideoFromSrc(videoSrc, 'sample.mp4');
+                } catch (error) {
+                    console.error('默认视频加载失败:', error);
+                    // 显示错误信息
+                    loadingMessage.style.display = 'none';
+                    errorMessage.style.display = 'block';
+                }
+                
+                // 如果有保存的播放位置，则恢复播放位置
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    videoPlayer.currentTime(state.currentTime || 0);
+                }
+                
+                // 隐藏加载消息
+                loadingMessage.style.display = 'none';
+                
+                // 视频可以播放时开始播放
+                videoPlayer.play().catch(error => {
+                    console.error('无法自动播放视频:', error);
+                    // 如果自动播放失败，至少显示视频元素让用户手动播放
+                });
+                
+            } catch (error) {
+                console.error('加载视频时出错:', error);
+                // 显示错误消息
+                loadingMessage.style.display = 'none';
+                errorMessage.style.display = 'block';
+            }
+        }
+        
+        // 保存视频播放状态
+        function saveVideoState() {
+            const state = {
+                videoSrc: videoPlayer.src(),
+                currentTime: videoPlayer.currentTime()
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        
+        // 监听视频事件
+        videoPlayer.on('timeupdate', () => {
+            // 定期保存播放位置
+            if (videoPlayer.currentTime() % 5 < 0.1) { // 每5秒保存一次
+                saveVideoState();
+            }
+        });
+        
+        videoPlayer.on('ended', () => {
+            // 视频播放结束时保存状态
+            saveVideoState();
+        });
+        
+        videoPlayer.on('error', (event) => {
+            console.error('电影播放错误:', event);
+            loadingMessage.style.display = 'none';
+            errorMessage.style.display = 'block';
+        });
+        
+        // 页面加载完成后加载视频
+        window.addEventListener('DOMContentLoaded', loadAndPlayVideo);
+        
+        // 页面关闭前保存播放状态
+        window.addEventListener('beforeunload', saveVideoState);
+    </script>
+</body>
+</html>
