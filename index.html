@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>每日电影</title>
+    <title>视频播放器</title>
     <!-- 引入Video.js库以支持更多视频格式 -->
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
@@ -174,11 +174,11 @@
 </head>
 <body>
     <div class="video-container">
-        <div class="loading-message">正在加载电影...</div>
+        <div class="loading-message">正在加载视频...</div>
         <video id="videoPlayer" class="video-js vjs-default-skin vjs-big-play-centered" controls autoplay loop></video>
         <div id="errorMessage" class="error-message">
-            <p>未找到可播放的电影文件</p>
-            <p>请在video文件夹中添加.mp4格式的电影文件</p>
+            <p>未找到可播放的视频文件</p>
+            <p>请在video文件夹中添加.mp4格式的视频文件</p>
         </div>
     </div>
     
@@ -399,7 +399,7 @@
         });
         
         videoPlayer.on('error', (event) => {
-            console.error('电影播放错误:', event);
+            console.error('视频播放错误:', event);
             loadingMessage.style.display = 'none';
             errorMessage.style.display = 'block';
         });
@@ -411,4 +411,5 @@
         window.addEventListener('beforeunload', saveVideoState);
     </script>
 </body>
+
 </html>
